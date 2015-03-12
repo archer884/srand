@@ -6,6 +6,9 @@ authors = ["J/A <archer884@gmail.com>"]
 
 [dependencies]
 
-iron = "*"
 rand = "*"
 rustc-serialize = "*"
+
+[dependencies.iron]
+
+git = "https://github.com/iron/iron"
