@@ -1,4 +1,4 @@
-#![feature(box_syntax)]
+#![feature(box_syntax, io)]
 
 extern crate iron;
 extern crate rand;
@@ -9,10 +9,9 @@ use iron::prelude::*;
 use iron::status;
 use rand::{ OsRng, Rng };
 use rand::distributions::{ IndependentSample, Range };
-use rand::distributions::range::SampleRange;
 use rustc_serialize::json;
-use std::cell::RefCell;
-use std::collections::hash_map::{ HashMap, Entry };
+use std::collections::hash_map::HashMap;
+use std::sync::{ Arc, Mutex };
 
 type SrandResult = Result<QueryResult, &'static str>;
 
@@ -61,39 +60,27 @@ impl<R: Rng + Send + Sync + 'static> PrngHandler<R> {
     }
 }
 
-/// It's impossible to write a stateful handler this way because (I'm assuming) the underlying
-/// Iron framework is based on the assumption that handlers are stateless, or should behave 
-/// statelessly, which means that some manner of synchronization will have to be applied to 
-/// anything that modifies the PrngHandler (and therefore borrows it as mutable). 
-///
-/// I know that there is some kind of way to do this in Rust, but I have no idea what that is,
-/// so I'm kind of stymied for the evening. I believe it has something to do with Arcs or some 
-/// crap along those lines--basically, you have an immutable borrowed reference to something 
-/// that can (magically) give you (and only you) a mutable reference to itself.
-///
-/// Damned if I know. I really never thought I'd have to use anything of the kind.
-impl<R: Rng + Send + Sync + 'static> Handler for RefCell<PrngHandler<R>> {
+impl<R: Rng + Send + Sync + 'static> Handler for Arc<Mutex<PrngHandler<R>>> {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
-        let ref_mut = match self.try_borrow_mut() {
-            Some(ref_mut) => ref_mut,
-            _ => return Ok(Response::with((status::Ok, "Unable to process request.")))
+        let mut handler = match self.lock() {
+            Ok(handler) => handler,
+            Err(_) => return Ok(Response::with((status::Ok, "Unable to process request."))),
         };
 
         let inputs: Vec<u64> = req.url.path.iter().filter_map(|i| i.parse().ok()).collect();
-
-        match ref_mut.deref_mut().build_query_result(&inputs[..]) {
+        match handler.build_query_result(&inputs[..]) {
             Ok(result) => Ok(Response::with((status::Ok, json::encode(&result).unwrap()))),
             Err(e) => Ok(Response::with((status::Ok, e))),
         }
-    } 
+    }
 }
 
 fn main() {
-    let mut prng = match OsRng::new() {
-        Ok(rng) => PrngHandler {
+    let prng = match OsRng::new() {
+        Ok(rng) => Arc::new(Mutex::new(PrngHandler {
             map: HashMap::new(),
             rng: rng,
-        },
+        })),
         Err(e) => {
             println!("{}", e.description());
             return;
