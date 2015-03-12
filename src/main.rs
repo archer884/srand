@@ -11,6 +11,7 @@ use rand::{ OsRng, Rng };
 use rand::distributions::{ IndependentSample, Range };
 use rand::distributions::range::SampleRange;
 use rustc_serialize::json;
+use std::cell::RefCell;
 use std::collections::hash_map::{ HashMap, Entry };
 
 type SrandResult = Result<QueryResult, &'static str>;
@@ -71,11 +72,16 @@ impl<R: Rng + Send + Sync + 'static> PrngHandler<R> {
 /// that can (magically) give you (and only you) a mutable reference to itself.
 ///
 /// Damned if I know. I really never thought I'd have to use anything of the kind.
-impl<R: Rng + Send + Sync + 'static> Handler for PrngHandler<R> {
+impl<R: Rng + Send + Sync + 'static> Handler for RefCell<PrngHandler<R>> {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
+        let ref_mut = match self.try_borrow_mut() {
+            Some(ref_mut) => ref_mut,
+            _ => return Ok(Response::with((status::Ok, "Unable to process request.")))
+        };
+
         let inputs: Vec<u64> = req.url.path.iter().filter_map(|i| i.parse().ok()).collect();
 
-        match self.build_query_result(&inputs[..]) {
+        match ref_mut.deref_mut().build_query_result(&inputs[..]) {
             Ok(result) => Ok(Response::with((status::Ok, json::encode(&result).unwrap()))),
             Err(e) => Ok(Response::with((status::Ok, e))),
         }
