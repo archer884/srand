@@ -11,7 +11,7 @@ use rand::{ OsRng, Rng };
 use rand::distributions::{ IndependentSample, Range };
 use rustc_serialize::json;
 use std::collections::hash_map::HashMap;
-use std::sync::{ Arc, Mutex };
+use std::sync::{ Mutex };
 
 type SrandResult = Result<QueryResult, &'static str>;
 
@@ -60,7 +60,7 @@ impl<R: Rng + Send + Sync + 'static> PrngHandler<R> {
     }
 }
 
-impl<R: Rng + Send + Sync + 'static> Handler for Arc<Mutex<PrngHandler<R>>> {
+impl<R: Rng + Send + Sync + 'static> Handler for Mutex<PrngHandler<R>> {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         let mut handler = match self.lock() {
             Ok(handler) => handler,
@@ -77,10 +77,10 @@ impl<R: Rng + Send + Sync + 'static> Handler for Arc<Mutex<PrngHandler<R>>> {
 
 fn main() {
     let prng = match OsRng::new() {
-        Ok(rng) => Arc::new(Mutex::new(PrngHandler {
+        Ok(rng) => Mutex::new(PrngHandler {
             map: HashMap::new(),
             rng: rng,
-        })),
+        }),
         Err(e) => {
             println!("{}", e.description());
             return;
