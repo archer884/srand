@@ -11,7 +11,7 @@ use rand::{ OsRng, Rng };
 use rand::distributions::{ IndependentSample, Range };
 use rustc_serialize::json;
 use std::collections::hash_map::HashMap;
-use std::sync::{ Mutex };
+use std::sync::Mutex;
 
 type SrandResult = Result<QueryResult, &'static str>;
 
